@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 72px; height: 72px; background: transparent; overflow: hidden; }
+
+  #bloom-widget {
+    width: 72px; height: 72px;
+    border-radius: 50%;
+    background: linear-gradient(145deg, #0f1a2e, #1c2a48);
+    border: 2px solid rgba(79,142,247,0.6);
+    box-shadow: 0 0 18px rgba(79,142,247,0.3);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    animation: bloom-float 3s ease-in-out infinite;
+    position: relative;
+    -webkit-app-region: drag;
+  }
+
+  #bloom-widget img {
+    width: 40px; height: 40px; object-fit: contain;
+    filter: brightness(0) invert(1);
+    animation: bloom-pulse 3s ease-in-out infinite;
+    -webkit-app-region: no-drag;
+  }
+
+  /* Alert state — red glow, faster pulse */
+  #bloom-widget.alert {
+    border-color: rgba(248,81,73,0.8);
+    box-shadow: 0 0 24px rgba(248,81,73,0.6);
+    animation: bloom-alert 0.5s ease-in-out infinite;
+  }
+  #bloom-widget.alert img {
+    animation: bloom-pulse-red 0.5s ease-in-out infinite;
+  }
+
+  /* Badge */
+  #badge {
+    position: absolute; top: 2px; right: 2px;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: #f85149; color: #fff;
+    font-size: 9px; font-weight: 800; font-family: sans-serif;
+    display: none; align-items: center; justify-content: center;
+    border: 1.5px solid #070a12;
+    -webkit-app-region: no-drag;
+  }
+  #badge.visible { display: flex; }
+
+  @keyframes bloom-float {
+    0%,100% { transform: translateY(0); }
+    50%      { transform: translateY(-5px); }
+  }
+  @keyframes bloom-pulse {
+    0%,100% { filter: brightness(0) invert(1) drop-shadow(0 0 4px rgba(79,142,247,0.6)); }
+    50%      { filter: brightness(0) invert(1) drop-shadow(0 0 10px rgba(79,142,247,1)); }
+  }
+  @keyframes bloom-alert {
+    0%,100% { transform: translateY(0) scale(1); box-shadow: 0 0 24px rgba(248,81,73,0.6); }
+    50%      { transform: translateY(-3px) scale(1.06); box-shadow: 0 0 36px rgba(248,81,73,0.9); }
+  }
+  @keyframes bloom-pulse-red {
+    0%,100% { filter: brightness(0) invert(1) drop-shadow(0 0 4px rgba(248,81,73,0.8)); }
+    50%      { filter: brightness(0) invert(1) drop-shadow(0 0 12px rgba(248,81,73,1)); }
+  }
+</style>
+</head>
+<body>
+<div id="bloom-widget" onclick="openPlatform()">
+  <img src="../assets/bloom.png" alt="Bloom" id="logo"
+       onerror="this.style.display='none';document.getElementById('fallback').style.display='block'"/>
+  <span id="fallback" style="display:none;font-size:28px;">B</span>
+  <div id="badge"></div>
+</div>
+
+<script>
+const { ipcRenderer, shell } = require('electron');
+
+let alertCount = 0;
+
+function openPlatform() {
+  // Reset alert state on click
+  document.getElementById('bloom-widget').classList.remove('alert');
+  alertCount = 0;
+  document.getElementById('badge').classList.remove('visible');
+  // Tell main process to open platform
+  ipcRenderer.send('open-platform');
+}
+
+ipcRenderer.on('defect-alert', (event, defect) => {
+  alertCount++;
+  document.getElementById('bloom-widget').classList.add('alert');
+  const badge = document.getElementById('badge');
+  badge.textContent = alertCount > 9 ? '9+' : alertCount;
+  badge.classList.add('visible');
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,30 @@
+{
+  "name": "bloom-assistant",
+  "version": "1.0.0",
+  "description": "Bloom AI Assistant — Bloomberg Platform desktop client",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win --x64"
+  },
+  "build": {
+    "appId": "com.ubisoft.bloom-assistant",
+    "productName": "Bloom Assistant",
+    "win": {
+      "target": "nsis",
+      "icon": "assets/bloom.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": false
+    },
+    "files": ["src/**/*", "assets/**/*"]
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^25.0.0"
+  }
+}
