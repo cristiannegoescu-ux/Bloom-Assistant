@@ -105,7 +105,13 @@ function createTray() {
   ]);
 
   tray.setContextMenu(menu);
-  tray.on('click', () => createPlatformWindow());
+  tray.on('click', () => {
+    if (pendingReport) {
+      openPlatformWithReport(pendingReport);
+    } else {
+      createPlatformWindow();
+    }
+  });
 }
 
 // ── Local IPC server — listens for defect events from Game Client ─────────────
@@ -126,6 +132,19 @@ function startIPCServer() {
   srv.listen(IPC_PORT, '127.0.0.1', () => {
     console.log(`Bloom IPC server listening on port ${IPC_PORT}`);
   });
+}
+
+// ── Pending crash/defect to inject when platform opens ───────────────────────
+let pendingReport = null;
+
+function injectReportIntoPlatform(defect) {
+  if (!platformWindow || platformWindow.isDestroyed()) return;
+  const safe = JSON.stringify(defect).replace(/\\/g, '\\\\').replace(/`/g, '\\`');
+  platformWindow.webContents.executeJavaScript(`
+    if (typeof window.bloomShowReport === 'function') {
+      window.bloomShowReport(${safe});
+    }
+  `).catch(() => {});
 }
 
 // ── Custom toast notification window ─────────────────────────────────────────
@@ -193,15 +212,24 @@ setTimeout(() => ipcRenderer.send('toast-close'), 7000);
   ipcMain.once('toast-close', () => { if (!toast.isDestroyed()) toast.close(); });
   ipcMain.once('toast-open-platform', () => {
     if (!toast.isDestroyed()) toast.close();
-    createPlatformWindow();
-    setTimeout(() => {
-      if (platformWindow && !platformWindow.isDestroyed()) {
-        platformWindow.loadURL(PLATFORM_URL);
-        platformWindow.show();
-        platformWindow.focus();
-      }
-    }, 400);
+    pendingReport = defect;
+    openPlatformWithReport(defect);
   });
+}
+
+function openPlatformWithReport(defect) {
+  if (platformWindow && !platformWindow.isDestroyed()) {
+    platformWindow.show();
+    platformWindow.focus();
+    // Platform already open — inject immediately
+    setTimeout(() => injectReportIntoPlatform(defect), 300);
+  } else {
+    createPlatformWindow();
+    // Wait for platform to finish loading before injecting
+    platformWindow.webContents.once('did-finish-load', () => {
+      setTimeout(() => injectReportIntoPlatform(defect), 800);
+    });
+  }
 }
 
 // ── Handle a defect event arriving from the game ──────────────────────────────
@@ -215,7 +243,13 @@ function handleIncomingDefect(defect) {
 }
 
 // ── Widget IPC ────────────────────────────────────────────────────────────────
-ipcMain.on('open-platform', () => createPlatformWindow());
+ipcMain.on('open-platform', () => {
+  if (pendingReport) {
+    openPlatformWithReport(pendingReport);
+  } else {
+    createPlatformWindow();
+  }
+});
 
 // ── App lifecycle ─────────────────────────────────────────────────────────────
 app.whenReady().then(() => {
