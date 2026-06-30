@@ -60,10 +60,10 @@ function createWidget() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
 
   widgetWindow = new BrowserWindow({
-    width: 72,
-    height: 72,
-    x: width - 100,
-    y: height - 100,
+    width: 90,
+    height: 90,
+    x: width - 110,
+    y: height - 118,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
@@ -128,23 +128,72 @@ function startIPCServer() {
   });
 }
 
-// ── Handle a defect event arriving from the game ──────────────────────────────
-function handleIncomingDefect(defect) {
-  const title = `🐛 Defect Detected — ${defect.type || 'Unknown'}`;
-  const body  = defect.summary || 'A defect was detected in the game session. Click to view the report.';
+// ── Custom toast notification window ─────────────────────────────────────────
+function showToast(defect) {
+  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+  const W = 360, H = 100;
 
-  // Send Windows notification
-  const notif = new Notification({
-    title,
-    body,
-    icon: path.join(__dirname, '..', 'assets', 'bloom.png'),
-    urgency: 'critical',
-    timeoutType: 'never'
+  const toast = new BrowserWindow({
+    width: W, height: H,
+    x: width - W - 16,
+    y: height - H - 16,
+    frame: false,
+    transparent: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    focusable: true,
+    backgroundColor: '#ffffff',
+    webPreferences: { nodeIntegration: true, contextIsolation: false }
   });
 
-  notif.on('click', () => {
+  const isCrash = defect.isCrash;
+  const accentHex = isCrash ? '#d03030' : '#e65c00';
+  const label     = isCrash ? 'CRITICAL CRASH' : 'DEFECT DETECTED';
+  const summary   = (defect.summary || 'A defect was detected in the game session.').replace(/'/g, "\\'");
+  const logoPath  = path.join(__dirname, '..', 'assets', 'bloom.png').replace(/\\/g, '/');
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:${W}px;height:${H}px;background:#fff;font-family:-apple-system,Segoe UI,sans-serif;overflow:hidden;cursor:pointer}
+  .wrap{display:flex;align-items:center;height:100%;padding:12px 14px;gap:12px;background:#fff;border-left:4px solid ${accentHex}}
+  .logo{width:40px;height:40px;object-fit:contain;flex-shrink:0}
+  .text{flex:1;min-width:0}
+  .label{font-size:10px;font-weight:700;letter-spacing:0.08em;color:${accentHex};text-transform:uppercase;margin-bottom:3px}
+  .title{font-size:13px;font-weight:700;color:#111;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sub{font-size:11px;color:#555;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .close{flex-shrink:0;font-size:16px;color:#aaa;line-height:1;padding:4px;border-radius:4px}
+  .close:hover{background:#f0f0f0;color:#333}
+  body:hover .wrap{background:#fafafa}
+</style>
+</head><body>
+<div class="wrap" id="wrap">
+  <img class="logo" src="file://${logoPath}" onerror="this.style.display='none'"/>
+  <div class="text">
+    <div class="label">${label}</div>
+    <div class="title">Bloomberg QA · ${defect.id || 'DEF-XXXX'}</div>
+    <div class="sub">${summary}</div>
+  </div>
+  <div class="close" id="cls">✕</div>
+</div>
+<script>
+const {ipcRenderer} = require('electron');
+document.getElementById('wrap').addEventListener('click', e => {
+  if(e.target.id==='cls'){ipcRenderer.send('toast-close'); return;}
+  ipcRenderer.send('toast-open-platform');
+});
+document.getElementById('cls').addEventListener('click', () => ipcRenderer.send('toast-close'));
+setTimeout(() => ipcRenderer.send('toast-close'), 7000);
+</script>
+</body></html>`;
+
+  toast.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
+
+  ipcMain.once('toast-close', () => { if (!toast.isDestroyed()) toast.close(); });
+  ipcMain.once('toast-open-platform', () => {
+    if (!toast.isDestroyed()) toast.close();
     createPlatformWindow();
-    // Navigate to reporter tab after a moment
     setTimeout(() => {
       if (platformWindow && !platformWindow.isDestroyed()) {
         platformWindow.loadURL(PLATFORM_URL);
@@ -153,8 +202,11 @@ function handleIncomingDefect(defect) {
       }
     }, 400);
   });
+}
 
-  notif.show();
+// ── Handle a defect event arriving from the game ──────────────────────────────
+function handleIncomingDefect(defect) {
+  showToast(defect);
 
   // Also tell the widget to show its alert state
   if (widgetWindow && !widgetWindow.isDestroyed()) {
